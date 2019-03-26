@@ -1,0 +1,8 @@
+[package]
+name = "siwir"
+version = "0.1.0"
+authors = ["manoet <manoet.ita@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+matches="^0.1"
