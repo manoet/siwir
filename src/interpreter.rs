@@ -18,10 +18,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#[macro_use] mod basic_parser;
-pub mod parser;
-pub mod interpreter;
+pub struct Context {
+}
 
-#[cfg(test)] mod ts_state;
-#[cfg(test)] mod ts_parser_macros;
+impl Context {
+}
 
+pub trait ASTNode {
+    fn interpret(ctx: &Context) {
+    }
+}
+
+pub struct VariableNode {
+}
+
+pub struct IntegerNode {
+}
+
+pub struct TermNode {
+}
+
+pub struct ExprNode {
+}
+
+pub struct ConditionNode {
+}
+
+pub struct LogicTermNode {
+}
+
+pub struct LogicExprNode {
+}

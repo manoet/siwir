@@ -121,3 +121,107 @@ fn rep() {
     assert_eq!(result.unwrap().peek(), 'b');
 }
 
+#[test]
+fn lower_letter() {
+    let matcher = lower_letter!();
+    let mut result = matcher.matches(&State::from_string("a"));
+    assert!(result.is_some());
+    result = matcher.matches(&State::from_string("z"));
+    assert!(result.is_some());
+    result = matcher.matches(&State::from_string("A"));
+    assert!(result.is_none());
+}
+
+#[test]
+fn upper_letter() {
+    let matcher = upper_letter!();
+    let mut result = matcher.matches(&State::from_string("A"));
+    assert!(result.is_some());
+    result = matcher.matches(&State::from_string("Z"));
+    assert!(result.is_some());
+    result = matcher.matches(&State::from_string("a"));
+    assert!(result.is_none());
+}
+
+#[test]
+fn letter() {
+    let matcher = letter!();
+    let mut result = matcher.matches(&State::from_string("A"));
+    assert!(result.is_some());
+    result = matcher.matches(&State::from_string("Z"));
+    assert!(result.is_some());
+    result = matcher.matches(&State::from_string("a"));
+    assert!(result.is_some());
+    result = matcher.matches(&State::from_string("z"));
+    assert!(result.is_some());
+    result = matcher.matches(&State::from_string("_"));
+    assert!(result.is_none());
+    result = matcher.matches(&State::from_string("0"));
+    assert!(result.is_none());
+}
+
+#[test]
+fn alpha() {
+    let matcher = alpha!();
+    let mut result = matcher.matches(&State::from_string("A"));
+    assert!(result.is_some());
+    result = matcher.matches(&State::from_string("z"));
+    assert!(result.is_some());
+    result = matcher.matches(&State::from_string("_"));
+    assert!(result.is_some());
+    result = matcher.matches(&State::from_string("0"));
+    assert!(result.is_none());
+}
+
+#[test]
+fn digit() {
+    let matcher = digit!();
+    let mut result = matcher.matches(&State::from_string("0"));
+    assert!(result.is_some());
+    result = matcher.matches(&State::from_string("9"));
+    assert!(result.is_some());
+    result = matcher.matches(&State::from_string("a"));
+    assert!(result.is_none());
+}
+
+#[test]
+fn letter_str() {
+    let matcher = letter_str!();
+    let mut result = matcher.matches(&State::from_string("Hello"));
+    assert!(result.is_some());
+    assert!(result.unwrap().complete());
+    let mut result = matcher.matches(&State::from_string("Hello_"));
+    assert!(result.is_some());
+    assert!(result.unwrap().peek() == '_');
+    result = matcher.matches(&State::from_string("Alpha42"));
+    assert!(result.is_some());
+    assert!(result.unwrap().peek() == '4');
+}
+
+#[test]
+fn alpha_str() {
+    let matcher = alpha_str!();
+    let mut result = matcher.matches(&State::from_string("Hello"));
+    assert!(result.is_some());
+    assert!(result.unwrap().complete());
+    let mut result = matcher.matches(&State::from_string("Hello_"));
+    assert!(result.is_some());
+    assert!(result.unwrap().complete());
+    result = matcher.matches(&State::from_string("Alpha42"));
+    assert!(result.is_some());
+    assert!(result.unwrap().peek() == '4');
+}
+
+#[test]
+fn alphanum_str() {
+    let matcher = alphanum_str!();
+    let mut result = matcher.matches(&State::from_string("Hello"));
+    assert!(result.is_some());
+    assert!(result.unwrap().complete());
+    let mut result = matcher.matches(&State::from_string("Hello_"));
+    assert!(result.is_some());
+    assert!(result.unwrap().complete());
+    result = matcher.matches(&State::from_string("Alpha42"));
+    assert!(result.is_some());
+    assert!(result.unwrap().complete());
+}

@@ -30,6 +30,10 @@ impl State {
         }
     }
 
+    pub fn display(&self) -> &str {
+        &self.s[..]
+    }
+
     pub fn peek(&self) -> char {
         match self.s.chars().next() {
             Some(c) => c,
@@ -183,6 +187,58 @@ macro_rules! alt {
             });
             trans
         }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////
+// Complex macro
+///////////////////////////////////////////////////////////////////////
+
+macro_rules! lower_letter {
+    () => {
+        chr!('a', 'z')
+    }
+}
+
+macro_rules! upper_letter {
+    () => {
+        chr!('A', 'Z')
+    }
+}
+
+macro_rules! letter {
+    () => {
+        alt!(lower_letter!(), upper_letter!())
+    }
+}
+
+macro_rules! alpha {
+    () => {
+        alt!(letter!(), chr!('_'))
+    }
+}
+
+macro_rules! digit {
+    () => {
+        chr!('0', '9')
+    }
+}
+
+macro_rules! letter_str {
+    () => {
+        rep!(letter!(), '+')
+    }
+}
+
+macro_rules! alpha_str {
+    () => {
+        rep!(alpha!(), '+')
+    }
+}
+
+macro_rules! alphanum_str {
+    () => {
+        rep!(alt!(alpha!(), digit!()), '+')
     }
 }
 

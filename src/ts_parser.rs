@@ -18,10 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#[macro_use] mod basic_parser;
-pub mod parser;
-pub mod interpreter;
+extern crate matches;
+use crate::parser;
 
-#[cfg(test)] mod ts_state;
-#[cfg(test)] mod ts_parser_macros;
 
