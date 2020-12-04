@@ -26,7 +26,9 @@ fn chr_match() {
     let matcher = chr!('a');
     let result = matcher.matches(&State::from_string("abcd"));
     assert!(result.is_some());
-    assert_eq!(result.unwrap().peek_many(3), "bcd");
+    let result = result.unwrap();
+    assert_eq!(result.peek_many(3), "bcd");
+    assert_eq!(result.matched(), "a");
 }
 
 #[test]
@@ -41,10 +43,13 @@ fn range_chr_match() {
     let matcher = chr!('0', '9');
     let result = matcher.matches(&State::from_string("0"));
     assert!(result.is_some());
+    assert_eq!(result.unwrap().matched(), "0");
     let result = matcher.matches(&State::from_string("5"));
     assert!(result.is_some());
+    assert_eq!(result.unwrap().matched(), "5");
     let result = matcher.matches(&State::from_string("9"));
     assert!(result.is_some());
+    assert_eq!(result.unwrap().matched(), "9");
 }
 
 #[test]
@@ -59,7 +64,9 @@ fn seq() {
     let matcher = seq!(chr!('a'), chr!('b'), chr!('c'));
     let result = matcher.matches(&State::from_string("abcd"));
     assert!(result.is_some());
-    assert_eq!(result.unwrap().peek(), 'd');
+    let result = result.unwrap();
+    assert_eq!(result.peek(), 'd');
+    assert_eq!(result.matched(), "abc");
 }
 
 #[test]
@@ -69,10 +76,12 @@ fn alt_match() {
     let matcher2 = alt!(chr!('b'), chr!('a'));
     let result1 = matcher1.matches(&state);
     assert!(result1.is_some());
-    assert_eq!(result1.unwrap().peek(), 'b');
+    assert_eq!(result1.as_ref().unwrap().peek(), 'b');
+    assert_eq!(result1.unwrap().matched(), "a");
     let result2 = matcher2.matches(&state);
     assert!(result2.is_some());
-    assert_eq!(result2.unwrap().peek(), 'b');
+    assert_eq!(result2.as_ref().unwrap().peek(), 'b');
+    assert_eq!(result2.unwrap().matched(), "a");
 }
 
 #[test]
@@ -89,11 +98,13 @@ fn opt() {
     // For opt being false
     let result= matcher.matches(&State::from_string("abc"));
     assert!(result.is_some());
-    assert_eq!(result.unwrap().peek(), 'a');
+    assert_eq!(result.as_ref().unwrap().peek(), 'a');
+    assert_eq!(result.unwrap().matched(), "");
     // for opt being true
     let result = matcher.matches(&State::from_string("bcd"));
     assert!(result.is_some());
-    assert_eq!(result.unwrap().peek(), 'c');
+    assert_eq!(result.as_ref().unwrap().peek(), 'c');
+    assert_eq!(result.unwrap().matched(), "b");
 }
 
 #[test]
@@ -104,20 +115,24 @@ fn rep() {
     assert!(result.is_some());
     result = matcher.matches(&State::from_string("bcda"));
     assert!(result.is_some());
+    assert_eq!(result.unwrap().matched(), "");
     // Testing +
     let matcher = rep!(chr!('a'), '+');
     result = matcher.matches(&State::from_string("aabcd"));
     assert!(result.is_some());
-    assert_eq!(result.unwrap().peek(), 'b');
+    assert_eq!(result.as_ref().unwrap().peek(), 'b');
+    assert_eq!(result.unwrap().matched(), "aa");
     result = matcher.matches(&State::from_string("bcda"));
     assert!(result.is_none());
     // Testing *
     let matcher = rep!(chr!('a'), '*');
     result = matcher.matches(&State::from_string("aaaaaaabcd"));
     assert!(result.is_some());
-    assert_eq!(result.unwrap().peek(), 'b');
+    assert_eq!(result.as_ref().unwrap().peek(), 'b');
+    assert_eq!(result.unwrap().matched(), "aaaaaaa");
     result = matcher.matches(&State::from_string("bcda"));
     assert!(result.is_some());
+    assert_eq!(result.as_ref().unwrap().matched(), "");
     assert_eq!(result.unwrap().peek(), 'b');
 }
 
@@ -192,9 +207,11 @@ fn letter_str() {
     assert!(result.unwrap().complete());
     let mut result = matcher.matches(&State::from_string("Hello_"));
     assert!(result.is_some());
-    assert!(result.unwrap().peek() == '_');
+    assert_eq!(result.as_ref().unwrap().matched(), "Hello");
+    assert_eq!(result.unwrap().peek(), '_');
     result = matcher.matches(&State::from_string("Alpha42"));
     assert!(result.is_some());
+    assert_eq!(result.as_ref().unwrap().matched(), "Alpha");
     assert!(result.unwrap().peek() == '4');
 }
 
@@ -203,12 +220,15 @@ fn alpha_str() {
     let matcher = alpha_str!();
     let mut result = matcher.matches(&State::from_string("Hello"));
     assert!(result.is_some());
+    assert_eq!(result.as_ref().unwrap().matched(), "Hello");
     assert!(result.unwrap().complete());
     let mut result = matcher.matches(&State::from_string("Hello_"));
     assert!(result.is_some());
+    assert_eq!(result.as_ref().unwrap().matched(), "Hello_");
     assert!(result.unwrap().complete());
     result = matcher.matches(&State::from_string("Alpha42"));
     assert!(result.is_some());
+    assert_eq!(result.as_ref().unwrap().matched(), "Alpha");
     assert!(result.unwrap().peek() == '4');
 }
 
@@ -217,11 +237,14 @@ fn alphanum_str() {
     let matcher = alphanum_str!();
     let mut result = matcher.matches(&State::from_string("Hello"));
     assert!(result.is_some());
+    assert_eq!(result.as_ref().unwrap().matched(), "Hello");
     assert!(result.unwrap().complete());
     let mut result = matcher.matches(&State::from_string("Hello_"));
     assert!(result.is_some());
+    assert_eq!(result.as_ref().unwrap().matched(), "Hello_");
     assert!(result.unwrap().complete());
     result = matcher.matches(&State::from_string("Alpha42"));
     assert!(result.is_some());
+    assert_eq!(result.as_ref().unwrap().matched(), "Alpha42");
     assert!(result.unwrap().complete());
 }

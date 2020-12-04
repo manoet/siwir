@@ -20,42 +20,54 @@
 
 #[derive(Clone)]
 pub struct State {
-    s: String,
+    remaining: String,
+    matched: String,
 }
 
 impl State {
     pub fn from_string(s: &str) -> State {
         State {
-            s: s.to_string(),
+            remaining: s.to_string(),
+            matched: "".to_string(),
         }
     }
 
-    pub fn display(&self) -> &str {
-        &self.s[..]
+    pub fn remaining(&self) -> &str {
+        &self.remaining[..]
+    }
+
+    pub fn matched(&self) -> &str {
+        &self.matched[..]
     }
 
     pub fn peek(&self) -> char {
-        match self.s.chars().next() {
+        match self.remaining.chars().next() {
             Some(c) => c,
             None => '\0',
         }
     }
 
     pub fn peek_many(&self, n: usize) -> &str {
-        if n > self.s.len() {
+        if n > self.remaining.len() {
             return "";
         }
-        &self.s[..n]
+        &self.remaining[..n]
     }
 
     pub fn read(&self, n: usize) -> State {
         State {
-            s: self.s[n..].to_string(),
+            remaining: self.remaining[n..].to_string(),
+            matched: self.remaining[..n].to_string(),
         }
     }
 
+    pub fn update(&mut self, other: &State) {
+        self.remaining = other.remaining.clone();
+        self.matched += &other.matched;
+    }
+
     pub fn complete(&self) -> bool {
-        self.s.len() == 0
+        self.remaining.len() == 0
     }
 }
 
@@ -98,19 +110,20 @@ macro_rules! seq {
     ($m1:expr, $($m2:expr),*) => {
         {
             let trans = Transition::new(move |state| {
-                let ret = $m1.matches(state);
-                if ret.is_none() {
+                let first = $m1.matches(state);
+                if first.is_none() {
                     return None;
                 }
+                let mut ret = first.unwrap();
                 $(
                     // Now match the other matchers
-                    let state = ret.unwrap();
-                    let ret = $m2.matches(&state);
-                    if ret.is_none() {
+                    let tmp = $m2.matches(&ret);
+                    if tmp.is_none() {
                         return None;
                     }
+                    ret.update(&tmp.unwrap());
                 )*
-                ret
+                Some(ret)
             });
             trans
         }
@@ -136,13 +149,13 @@ macro_rules! any {
     ($m:expr) => {
         {
             let trans = Transition::new(move |state| {
-                let mut prev = state.clone();
+                let mut ret = state.read(0);
                 loop {
-                    let ret = $m.matches(&prev);
-                    if ret.is_some() {
-                        prev = ret.unwrap();
+                    let tmp = $m.matches(&ret);
+                    if tmp.is_some() {
+                        ret.update(&tmp.unwrap());
                     } else {
-                        return Some(prev);
+                        return Some(ret);
                     }
                 }
             });
@@ -157,13 +170,7 @@ macro_rules! rep {
             let trans = Transition::new(move |state| {
                 match $times {
                     '?' => opt!($matcher).matches(state),
-                    '+' => {
-                        let ret = $matcher.matches(state);
-                        match ret {
-                            Some(_) => any!($matcher).matches(&ret.unwrap()),
-                            None => None,
-                        }
-                    },
+                    '+' => seq!($matcher, any!($matcher)).matches(state),
                     '*' => any!($matcher).matches(state),
                     _ => panic!("Unknown quantifier {}", $times),
                 }
