@@ -248,3 +248,65 @@ fn alphanum_str() {
     assert_eq!(result.as_ref().unwrap().matched(), "Alpha42");
     assert!(result.unwrap().complete());
 }
+
+#[test]
+fn ws() {
+    let mut result = ws!().matches(&State::from_string("   \t\n  \r "));
+    assert!(result.is_some());
+    assert!(result.as_ref().unwrap().complete());
+    assert_eq!(result.unwrap().matched(), "");
+
+    result = ws!().matches(&State::from_string("abcde"));
+    assert!(result.is_some());
+    assert_eq!(result.as_ref().unwrap().remaining(), "abcde");
+    assert_eq!(result.unwrap().matched(), "");
+
+    result = ws!().matches(&State::from_string("\tabcde"));
+    assert!(result.is_some());
+    assert_eq!(result.as_ref().unwrap().remaining(), "abcde");
+    assert_eq!(result.unwrap().matched(), "");
+}
+
+#[test]
+fn name() {
+    let mut result = name!().matches(&State::from_string("n"));
+    assert!(result.is_some());
+    assert!(result.as_ref().unwrap().complete());
+    assert_eq!(result.unwrap().matched(), "n");
+
+    result = name!().matches(&State::from_string("name"));
+    assert!(result.is_some());
+    assert!(result.as_ref().unwrap().complete());
+    assert_eq!(result.unwrap().matched(), "name");
+
+    result = name!().matches(&State::from_string("complex_name0"));
+    assert!(result.is_some());
+    assert!(result.as_ref().unwrap().complete());
+    assert_eq!(result.unwrap().matched(), "complex_name0");
+
+    result = name!().matches(&State::from_string("_name"));
+    assert!(result.is_none());
+
+    result = name!().matches(&State::from_string("0name"));
+    assert!(result.is_none());
+}
+
+#[test]
+fn dotted_name() {
+    let matcher = dotted_name!();
+    let mut result = matcher.matches(&State::from_string("dotted.name.var"));
+    assert!(result.is_some());
+    assert!(result.as_ref().unwrap().complete());
+    assert_eq!(result.unwrap().matched(), "dotted.name.var");
+
+    result = matcher.matches(&State::from_string("dotted\n.name.\tvar"));
+    assert!(result.is_some());
+    assert!(result.as_ref().unwrap().complete());
+    assert_eq!(result.unwrap().matched(), "dotted.name.var");
+
+    result = matcher.matches(&State::from_string(".invalid.name"));
+    assert!(result.is_none());
+
+    result = matcher.matches(&State::from_string(".invalid.name."));
+    assert!(result.is_none());
+}

@@ -40,6 +40,10 @@ impl State {
         &self.matched[..]
     }
 
+    pub fn discard_match(&mut self) {
+        self.matched = "".to_string();
+    }
+
     pub fn peek(&self) -> char {
         match self.remaining.chars().next() {
             Some(c) => c,
@@ -137,7 +141,7 @@ macro_rules! opt {
                 let ret = $m.matches(state);
                 match ret {
                     Some(_) => ret,
-                    None => Some(state.clone()),
+                    None => Some(state.read(0)),
                 }
             });
             trans
@@ -197,9 +201,32 @@ macro_rules! alt {
     }
 }
 
+macro_rules! discard {
+    ($m:expr) => {
+        {
+            let trans = Transition::new(move |state| {
+                match $m.matches(state) {
+                    None => None,
+                    Some(mut s) => {
+                        s.discard_match();
+                        Some(s)
+                    }
+                }
+            });
+            trans
+        }
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////
 // Complex macro
 ///////////////////////////////////////////////////////////////////////
+
+macro_rules! ws {
+    () => {
+        discard!(any!(alt!(chr!(' '), chr!('\t'), chr!('\n'), chr!('\r'))))
+    }
+}
 
 macro_rules! lower_letter {
     () => {
@@ -231,6 +258,12 @@ macro_rules! digit {
     }
 }
 
+macro_rules! natural {
+    () => {
+        alt!(chr!('0'), seq!(chr!('1', '9'), any!(digit!())))
+    }
+}
+
 macro_rules! letter_str {
     () => {
         rep!(letter!(), '+')
@@ -249,3 +282,14 @@ macro_rules! alphanum_str {
     }
 }
 
+macro_rules! name {
+    () => {
+        seq!(letter!(), opt!(alphanum_str!()))
+    }
+}
+
+macro_rules! dotted_name {
+    () => {
+        seq!(any!(seq!(name!(), ws!(), chr!('.'), ws!())), name!())
+    }
+}

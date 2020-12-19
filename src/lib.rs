@@ -19,6 +19,7 @@
 // SOFTWARE.
 
 #[macro_use] mod basic_parser;
+pub mod ast;
 pub mod parser;
 pub mod interpreter;
 
