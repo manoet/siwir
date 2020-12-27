@@ -19,7 +19,8 @@
 // SOFTWARE.
 
 pub trait AstNode {
-
+    fn append_child(&mut self, node: Box<dyn AstNode>);
+    fn prepend_child(&mut self, node: Box<dyn AstNode>);
 }
 
 pub trait StringInitialized {
@@ -38,10 +39,49 @@ impl RootNode {
     }
 }
 
-struct BinaryOperator {
+impl AstNode for RootNode {
+    fn append_child(&mut self, node: Box<dyn AstNode>) {
+        if self.root.is_some() {
+            panic!("Root node already set.");
+        }
+        self.root = Some(node);
+    }
+
+    fn prepend_child(&mut self, _node: Box<dyn AstNode>) {
+        panic!("Prepend not implemented for root node.");
+    }
+}
+
+pub struct BinaryOperator {
     op: String,
     left: Option<Box<dyn AstNode>>,
     right: Option<Box<dyn AstNode>>,
+}
+
+impl AstNode for BinaryOperator {
+    fn append_child(&mut self, node: Box<dyn AstNode>) {
+        if self.right.is_some() {
+            panic!("Right node is already set.");
+        }
+        self.right = Some(node);
+    }
+
+    fn prepend_child(&mut self, node: Box<dyn AstNode>) {
+        if self.left.is_some() {
+            panic!("Left node is already set.");
+        }
+        self.left = Some(node);
+    }
+}
+
+impl StringInitialized for BinaryOperator {
+    fn from_str(v: &str) -> Box<dyn AstNode> {
+        Box::new(BinaryOperator {
+            op: v.to_string(),
+            left: None,
+            right: None
+        })
+    }
 }
 
 pub struct UnaryOperator {
@@ -50,20 +90,45 @@ pub struct UnaryOperator {
 
 pub struct FnCall {
     pub fn_name: String,
-    //args: FnArgs,
+    pub args: Box<dyn AstNode>,
 }
 
-impl AstNode for FnCall {}
+impl AstNode for FnCall {
+    fn append_child(&mut self, node: Box<dyn AstNode>) {
+        panic!("Append not implemented in FnCall node.");
+    }
+
+    fn prepend_child(&mut self, node: Box<dyn AstNode>) {
+        panic!("Prepend not implemented in FnCall node.");
+    }
+}
 
 pub struct FnArgs {
     args: Vec<Box<dyn AstNode>>,
+}
+
+impl AstNode for FnArgs {
+    fn append_child(&mut self, node: Box<dyn AstNode>) {
+        self.args.push(node);
+    }
+
+    fn prepend_child(&mut self, node: Box<dyn AstNode>) {
+        panic!("Prepend not implemented in FnArgs node.");
+    }
 }
 
 pub struct VarRef {
     var_name: String,
 }
 
-impl AstNode for VarRef {}
+impl AstNode for VarRef {
+    fn append_child(&mut self, node: Box<dyn AstNode>) {
+        panic!("Append not implemented in VarRef node.");
+    }
+    fn prepend_child(&mut self, node: Box<dyn AstNode>) {
+        panic!("Prepend not implemented in VarRef node.");
+    }
+}
 
 impl StringInitialized for VarRef {
     fn from_str(v: &str) -> Box<dyn AstNode> {
@@ -75,7 +140,14 @@ pub struct Natural {
     pub value: u32,
 }
 
-impl AstNode for Natural {}
+impl AstNode for Natural {
+    fn append_child(&mut self, node: Box<dyn AstNode>) {
+        panic!("Append not implemented in Natural node.");
+    }
+    fn prepend_child(&mut self, node: Box<dyn AstNode>) {
+        panic!("Prepend not implemented in Natural node.");
+    }
+}
 
 impl StringInitialized for Natural {
     fn from_str(v: &str) -> Box<dyn AstNode> {

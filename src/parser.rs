@@ -25,7 +25,7 @@ use crate::basic_parser::Transition;
 // name     := letter [alphanum_str]
 // dotname  := (name '.')* name
 // var      := ['$'] dotname
-// args     := (id (',' id)*)?
+// args     := (expr (',' expr)*)?
 // fcall    := ['$'] dotname '(' args ')'
 // value    := number
 // number   := natural
@@ -47,7 +47,7 @@ struct ParserState {
 
 impl ParserState {
     fn new<T: ast::StringInitialized>(s: State) -> ParserState {
-        InnerParserState {
+        ParserState {
             node: T::from_str(s.matched()),
             state: s,
         }
@@ -59,6 +59,17 @@ impl ParserState {
 
     fn update(&mut self, other: &State) {
         self.state.update(other);
+    }
+
+    fn append_child(&mut self, child: ParserState) {
+        self.node.append_child(child.node);
+        self.state.update(&child.state);
+    }
+
+    fn prepend_child(&mut self, child: ParserState) {
+        self.node.prepend_child(child.node);
+        child.state.update(&self.state);
+        self.state = child.state;
     }
 }
 
@@ -100,29 +111,28 @@ impl Parser {
     }
 
     fn args(&self, state: &State) -> Option<ParserState> {
-        let first_arg = self.id(&state);
+        let mut first_arg = self.expr(&state);
         if first_arg.is_none() {
             // void function
             return Some(ParserState {
-                state: state,
+                state: state.clone(),
                 node: Box::new(ast::FnArgs { args: vec![] }),
             })
         }
-        let curr = first_arg.clone();
+        let mut args = vec![];
+        let curr = first_arg.unwrap();
+        args.push(curr.node);
         loop {
-            let arg = self.id(&curr);
-            if arg.is_none() {
-                return match i {
-                    0 => Some(curr),
-                    _ => None,
-                }
-            }
-            let comma = seq!(ws!(), chr!(',')).matches(&arg.as_ref().unwrap());
+            let comma = seq!(ws!(), chr!(',')).matches(&curr.state);
             if comma.is_none() {
-                return arg;
+                return Some(ParserState {
+                    state: curr.state,
+                    node: Box::new(ast::FnArgs { args: args }),
+                });
             }
-            curr = comma.unwrap();
-            i += 1;
+
+            let arg = self.expr(&curr.state);
+            if arg.is_none() { return None; }
         }
     }
 
@@ -138,10 +148,12 @@ impl Parser {
         let rbrace = chr!(')').matches(&args.unwrap().state);
         if rbrace.is_none() { return None; }
         // Build the AST
-        // TODO args
         Some(ParserState{
             state: rbrace.unwrap(),
-            node: Box::new(ast::FnCall{fn_name: fn_name.unwrap().matched().to_string()}),
+            node: Box::new(ast::FnCall{
+                fn_name: fn_name.unwrap().matched().to_string(),
+                args: args.unwrap().node,
+            }),
         })
     }
 
@@ -164,7 +176,7 @@ impl Parser {
         if expr.is_none() { return None; }
         let rbrace = seq!(ws!(), chr!(')')).matches(&expr.as_ref().unwrap().state);
         if rbrace.is_none() { return None; }
-        expr.update(&rbrace.unwrap());
+        expr.unwrap().update(&rbrace.unwrap());
         expr
     }
 
@@ -172,106 +184,113 @@ impl Parser {
         let op = seq!(ws!(), alt!(chr!('*'), chr!('/'), chr!('%')))
             .matches(&state);
         if op.is_none() { return None; }
-        let op = ParserState::new::<ast::BinaryOperator>(op.unwrap());
-        let factor = self.factor(&op.state);
+        let factor = self.factor(&op.as_ref().unwrap());
         if factor.is_none() { return None; }
-        op.update(factor.unwrap();
-        op
+        // Parsing done. Create ParserState
+        let op = ParserState::new::<ast::BinaryOperator>(op.unwrap());
+        op.append_child(factor.unwrap());
+        Some(op)
     }
 
-    fn term(&self, state: &State) -> Option<State> {
+    fn term(&self, state: &State) -> Option<ParserState> {
         let mut ret = self.factor(&state);
         if ret.is_none() {
             return None;
         }
-        None
-//        loop {
-//            let curr = self.term_rhs(&ret.as_ref().unwrap());
-//            if curr.is_none() { return ret; }
-//            ret = curr;
-//        }
+        loop {
+            let curr = self.term_rhs(&ret.as_ref().unwrap().state);
+            if curr.is_none() { return ret; }
+            curr.unwrap().prepend_child(ret.unwrap());
+            ret = curr;
+        }
     }
 
-    fn expr_rhs(&self, state: &State) -> Option<State> {
+    fn expr_rhs(&self, state: &State) -> Option<ParserState> {
         let op = seq!(ws!(), alt!(chr!('+'), chr!('-'))).matches(&state);
         if op.is_none() { return None; }
-        self.term(&op.unwrap())
+        let term = self.term(&op.as_ref().unwrap());
+        if term.is_none() { return None; }
+        // Parsing done. Create ParserState
+        let op = ParserState::new::<ast::BinaryOperator>(op.unwrap());
+        op.append_child(term.unwrap());
+        Some(op)
     }
 
-    fn expr(&self, state: &State) -> Option<State> {
+    fn expr(&self, state: &State) -> Option<ParserState> {
         let mut ret = self.term(&state);
         if ret.is_none() { return None; }
         loop {
-            let curr = self.expr_rhs(&ret.as_ref().unwrap());
+            let curr = self.expr_rhs(&ret.as_ref().unwrap().state);
             if curr.is_none() { return ret; }
+            curr.unwrap().prepend_child(ret.unwrap());
             ret = curr;
         }
     }
 
-    fn condition(&self, state: &State) -> Option<State> {
-        let mut trimmed = ws!().matches(&state).unwrap();
-        let not = chr!('!').matches(&trimmed);
-        if not.is_some() { return self.logic_factor(&not.unwrap()); }
-        let expr = self.expr(&trimmed);
-        if expr.is_none() { return None; }
-        trimmed = ws!().matches(&expr.unwrap()).unwrap();
-        let op = alt!(seq!(chr!('='), chr!('=')),
-                      seq!(chr!('!'), chr!('=')),
-                      seq!(chr!('<'), chr!('=')),
-                      seq!(chr!('>'), chr!('=')),
-                      chr!('<'),
-                      chr!('>')).matches(&trimmed);
-        if op.is_none() { return None; }
-        self.expr(&op.unwrap())
-    }
-
-    fn logic_factor(&self, state: &State) -> Option<State> {
-        let mut trimmed = ws!().matches(&state).unwrap();
-        let cond = self.condition(&trimmed);
-        if cond.is_some() {
-            return cond;
-        }
-        let lbrace = chr!('(').matches(&trimmed);
-        if lbrace.is_none() {return None;}
-        let expr = self.logic_expr(&lbrace.unwrap());
-        if expr.is_none() { return None; }
-        trimmed = ws!().matches(&expr.unwrap()).unwrap();
-        chr!(')').matches(&trimmed)
-    }
-
-    fn logic_term_rhs(&self, state: &State) -> Option<State> {
-        let trimmed = ws!().matches(&state).unwrap();
-        let op = seq!(chr!('&'), chr!('&')).matches(&trimmed);
-        if op.is_none() { return None; }
-        self.logic_factor(&op.unwrap())
-    }
-
-    fn logic_term(&self, state: &State) -> Option<State> {
-        let mut ret = self.logic_factor(&state);
-        if ret.is_none() { return None; }
-        loop {
-            let curr = self.logic_term_rhs(&ret.as_ref().unwrap());
-            if curr.is_none() { return ret; }
-            ret = curr;
-        }
-    }
-
-    fn logic_expr_rhs(&self, state: &State) -> Option<State> {
-        let trimmed = ws!().matches(&state).unwrap();
-        let op = seq!(chr!('|'), chr!('|')).matches(&trimmed);
-        if op.is_none() { return None; }
-        self.logic_term(&op.unwrap())
-    }
-
-    fn logic_expr(&self, state: &State) -> Option<State> {
-        let mut ret = self.logic_term(&state);
-        if ret.is_none() { return None; }
-        loop {
-            let curr = self.logic_expr_rhs(&ret.as_ref().unwrap());
-            if curr.is_none() { return ret; }
-            ret = curr;
-        }
-    }
+//    fn condition(&self, state: &State) -> Option<State> {
+//        let mut trimmed = ws!().matches(&state).unwrap();
+//        let not = chr!('!').matches(&trimmed);
+//        if not.is_some() { return self.logic_factor(&not.unwrap()); }
+//        let expr = self.expr(&trimmed);
+//        if expr.is_none() { return None; }
+//        trimmed = ws!().matches(&expr.unwrap()).unwrap();
+//        let op = alt!(seq!(chr!('='), chr!('=')),
+//                      seq!(chr!('!'), chr!('=')),
+//                      seq!(chr!('<'), chr!('=')),
+//                      seq!(chr!('>'), chr!('=')),
+//                      chr!('<'),
+//                      chr!('>')).matches(&trimmed);
+//        if op.is_none() { return None; }
+//        self.expr(&op.unwrap())
+//    }
+//
+//    fn logic_factor(&self, state: &State) -> Option<State> {
+//        let mut trimmed = ws!().matches(&state).unwrap();
+//        let cond = self.condition(&trimmed);
+//        if cond.is_some() {
+//            return cond;
+//        }
+//        let lbrace = chr!('(').matches(&trimmed);
+//        if lbrace.is_none() {return None;}
+//        let expr = self.logic_expr(&lbrace.unwrap());
+//        if expr.is_none() { return None; }
+//        trimmed = ws!().matches(&expr.unwrap()).unwrap();
+//        chr!(')').matches(&trimmed)
+//    }
+//
+//    fn logic_term_rhs(&self, state: &State) -> Option<State> {
+//        let trimmed = ws!().matches(&state).unwrap();
+//        let op = seq!(chr!('&'), chr!('&')).matches(&trimmed);
+//        if op.is_none() { return None; }
+//        self.logic_factor(&op.unwrap())
+//    }
+//
+//    fn logic_term(&self, state: &State) -> Option<State> {
+//        let mut ret = self.logic_factor(&state);
+//        if ret.is_none() { return None; }
+//        loop {
+//            let curr = self.logic_term_rhs(&ret.as_ref().unwrap());
+//            if curr.is_none() { return ret; }
+//            ret = curr;
+//        }
+//    }
+//
+//    fn logic_expr_rhs(&self, state: &State) -> Option<State> {
+//        let trimmed = ws!().matches(&state).unwrap();
+//        let op = seq!(chr!('|'), chr!('|')).matches(&trimmed);
+//        if op.is_none() { return None; }
+//        self.logic_term(&op.unwrap())
+//    }
+//
+//    fn logic_expr(&self, state: &State) -> Option<State> {
+//        let mut ret = self.logic_term(&state);
+//        if ret.is_none() { return None; }
+//        loop {
+//            let curr = self.logic_expr_rhs(&ret.as_ref().unwrap());
+//            if curr.is_none() { return ret; }
+//            ret = curr;
+//        }
+//    }
 }
 
 mod ts_parser {
@@ -320,54 +339,54 @@ fn parse_var() {
     assert_complete!(p.var(&State::from_string("$dotted.var")));
 }
 
-//#[test]
-//fn parse_fcall() {
-//    let p = Parser::new();
-//    assert_complete!(p.fcall(&State::from_string("fn(arg)")));
-//    assert_complete!(p.fcall(&State::from_string("fn()")));
-//    assert_complete!(p.fcall(&State::from_string("$fn(arg0, arg1)")));
-//    assert_complete!(p.fcall(&State::from_string("$fn($arg0(z), 21)")));
-//}
-//
-//#[test]
-//fn parse_id() {
-//    let p = Parser::new();
-//    assert_complete!(p.id(&State::from_string("var")));
-//    assert_complete!(p.id(&State::from_string("$var")));
-//    assert_complete!(p.id(&State::from_string("fn(arg)")));
-//    assert_complete!(p.id(&State::from_string("$fn(arg)")));
-//    assert_complete!(p.id(&State::from_string("0")));
-//}
-//
-//#[test]
-//fn parse_factor() {
-//    let p = Parser::new();
-//    assert_complete!(p.factor(&State::from_string("42")));
-//    assert_complete!(p.factor(&State::from_string(" ( 42+21 )")));
-//    assert_complete!(p.factor(&State::from_string(" ( $var )")));
-//}
-//
-//#[test]
-//fn parse_term() {
-//    let p = Parser::new();
-//    assert_complete!(p.term(&State::from_string("42 * 21")));
-//    assert_complete!(p.term(&State::from_string("42 / 21")));
-//    assert_complete!(p.term(&State::from_string("42 % 21")));
-//    assert_complete!(p.term(&State::from_string("42")));
-//    assert_complete!(p.term(&State::from_string("(1 + 2) * (3 + 4 + 5) / 6")));
-//}
-//
-//#[test]
-//fn parse_expr() {
-//    let p = Parser::new();
-//    assert_complete!(p.expr(&State::from_string("31")));
-//    assert_complete!(p.expr(&State::from_string("31 * 91")));
-//    assert_complete!(p.expr(&State::from_string("31 * 91 + 21")));
-//    assert_complete!(p.expr(&State::from_string("31 * 91 + 21 - 51")));
-//    assert_complete!(p.expr(&State::from_string("31 * 91 + 21 - 51/41 % 21")));
-//    assert_complete!(p.expr(&State::from_string("1 + 2  +3")));
-//}
-//
+#[test]
+fn parse_fcall() {
+    let p = Parser::new();
+    assert_complete!(p.fcall(&State::from_string("fn(arg)")));
+    assert_complete!(p.fcall(&State::from_string("fn()")));
+    assert_complete!(p.fcall(&State::from_string("$fn(arg0, arg1)")));
+    assert_complete!(p.fcall(&State::from_string("$fn($arg0(z), 21)")));
+}
+
+#[test]
+fn parse_id() {
+    let p = Parser::new();
+    assert_complete!(p.id(&State::from_string("var")));
+    assert_complete!(p.id(&State::from_string("$var")));
+    assert_complete!(p.id(&State::from_string("fn(arg)")));
+    assert_complete!(p.id(&State::from_string("$fn(arg)")));
+    assert_complete!(p.id(&State::from_string("0")));
+}
+
+#[test]
+fn parse_factor() {
+    let p = Parser::new();
+    assert_complete!(p.factor(&State::from_string("42")));
+    assert_complete!(p.factor(&State::from_string(" ( 42+21 )")));
+    assert_complete!(p.factor(&State::from_string(" ( $var )")));
+}
+
+#[test]
+fn parse_term() {
+    let p = Parser::new();
+    assert_complete!(p.term(&State::from_string("42 * 21")));
+    assert_complete!(p.term(&State::from_string("42 / 21")));
+    assert_complete!(p.term(&State::from_string("42 % 21")));
+    assert_complete!(p.term(&State::from_string("42")));
+    assert_complete!(p.term(&State::from_string("(1 + 2) * (3 + 4 + 5) / 6")));
+}
+
+#[test]
+fn parse_expr() {
+    let p = Parser::new();
+    assert_complete!(p.expr(&State::from_string("31")));
+    assert_complete!(p.expr(&State::from_string("31 * 91")));
+    assert_complete!(p.expr(&State::from_string("31 * 91 + 21")));
+    assert_complete!(p.expr(&State::from_string("31 * 91 + 21 - 51")));
+    assert_complete!(p.expr(&State::from_string("31 * 91 + 21 - 51/41 % 21")));
+    assert_complete!(p.expr(&State::from_string("1 + 2  +3")));
+}
+
 //#[test]
 //fn parse_condition() {
 //    let p = Parser::new();
